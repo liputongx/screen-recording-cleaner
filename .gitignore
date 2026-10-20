@@ -1,0 +1,15 @@
+# 运行时产物
+uploads/
+frames/
+output/
+__pycache__/
+*.pyc
+
+# 本地工作区记忆（WorkBuddy）
+.workbuddy/
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

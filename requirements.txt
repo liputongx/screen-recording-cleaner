@@ -1,0 +1,5 @@
+flask>=3.0
+requests>=2.31
+imageio-ffmpeg>=0.5
+pillow>=10.0
+rapidocr-onnxruntime>=1.2

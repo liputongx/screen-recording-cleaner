@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>录屏文档清洗工具</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e5e7eb;
+    --text: #1f2937; --sub: #6b7280; --brand: #2563eb;
+    --brand-d: #1d4ed8; --ok: #16a34a; --warn: #d97706; --err: #dc2626;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
+  header { margin-bottom: 20px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--sub); }
+
+  .steps { display: flex; gap: 8px; margin: 16px 0 24px; flex-wrap: wrap; }
+  .step {
+    padding: 6px 14px; border-radius: 20px; background: #eef0f3; color: var(--sub);
+    font-size: 13px; white-space: nowrap;
+  }
+  .step.active { background: var(--brand); color: #fff; }
+  .step.done { background: #dbeafe; color: var(--brand-d); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 4px; font-size: 16px; }
+  .card .hint { margin: 0 0 14px; color: var(--sub); font-size: 13px; }
+
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  label { font-size: 13px; color: var(--sub); }
+  input[type=text], input[type=password], input[type=number], select {
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px;
+    background: #fff; color: var(--text); outline: none;
+  }
+  input:focus, select:focus { border-color: var(--brand); }
+  button {
+    padding: 9px 18px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 14px; background: var(--brand); color: #fff; transition: .15s;
+  }
+  button:hover { background: var(--brand-d); }
+  button:disabled { background: #c7d2fe; cursor: not-allowed; }
+  button.ghost { background: #fff; color: var(--text); border: 1px solid var(--line); }
+  button.ghost:hover { background: #f3f4f6; }
+  button.ok { background: var(--ok); }
+  button.ok:hover { background: #15803d; }
+
+  .drop {
+    border: 2px dashed var(--line); border-radius: var(--radius); padding: 36px;
+    text-align: center; color: var(--sub); cursor: pointer; transition: .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--brand); background: #f8faff; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+  .frame { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+  .frame img { width: 100%; display: block; aspect-ratio: 16/10; object-fit: cover; }
+  .frame .tag { position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+  .frame.sel { border: 2px solid var(--brand); }
+
+  .progress { height: 8px; background: #eef0f3; border-radius: 4px; overflow: hidden; margin-top: 12px; }
+  .progress > div { height: 100%; background: var(--brand); width: 0; transition: width .3s; }
+
+  .result-item { border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .result-item:last-child { border-bottom: none; }
+  .result-item .idx { font-weight: 600; color: var(--brand); margin-right: 8px; }
+  .result-item pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 13px; color: #374151; }
+
+  #output { white-space: pre-wrap; word-break: break-word; background: #fafafa; border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-height: 200px; max-height: 520px; overflow: auto; }
+  .msg { margin-top: 10px; font-size: 13px; }
+  .msg.err { color: var(--err); }
+  .msg.ok { color: var(--ok); }
+  .msg.warn { color: var(--warn); }
+
+  .seg { margin-bottom: 12px; }
+  .seg .label { display: block; font-size: 13px; color: var(--sub); margin-bottom: 4px; }
+  .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .num-badge { font-weight: 700; color: var(--brand); }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--brand); font-size: 13px; }
+  textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📹 录屏文档清洗工具</h1>
+    <p>上传视频 → 抽帧（可调时间倍率）→ 视觉大模型识别 → 清洗 → 导出 Markdown</p>
+  </header>
+
+  <div class="steps">
+    <div class="step active" id="s1">1. 上传视频</div>
+    <div class="step" id="s2">2. 抽帧设置</div>
+    <div class="step" id="s3">3. 识别配置</div>
+    <div class="step" id="s4">4. 清洗</div>
+    <div class="step" id="s5">5. 导出</div>
+  </div>
+
+  <!-- 第 1 步：上传 -->
+  <div class="card">
+    <h2>① 上传视频</h2>
+    <p class="hint">支持 mp4 / mov / avi / mkv / webm / flv / m4v，最大 2GB</p>
+    <div class="drop" id="drop">点击或拖拽视频文件到这里</div>
+    <input type="file" id="file" accept="video/*" style="display:none">
+    <div class="msg" id="uploadMsg"></div>
+    <div id="videoInfo" style="display:none; margin-top:12px;">
+      <div class="row" style="gap:20px;">
+        <span>文件：<b id="vName"></b></span>
+        <span>时长：<b id="vDur"></b> 秒</span>
+        <span>分辨率：<b id="vRes"></b></span>
+        <span>帧率：<b id="vFps"></b></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 第 2 步：抽帧 -->
+  <div class="card">
+    <h2>② 抽帧设置（时间倍率控制）</h2>
+    <p class="hint">通过「抽帧间隔」控制抽取密度：间隔越小帧越多、内容越密；间隔越大帧越少、速度越快。倍率 = 间隔 ÷ 基准 1 秒。</p>
+    <div class="seg">
+      <span class="label">抽帧间隔（秒）</span>
+      <div class="inline">
+        <input type="number" id="interval" value="2" min="0.1" max="60" step="0.1" style="width:90px">
+        <span id="intervalRate" class="num-badge">= 2× 基准</span>
+        <span style="color:var(--sub)">基准 = 1 秒/帧</span>
+      </div>
+    </div>
+    <div class="seg">
+      <span class="label">快捷倍率</span>
+      <div class="inline">
+        <button class="ghost" data-rate="0.5">0.5×</button>
+        <button class="ghost" data-rate="1">1×</button>
+        <button class="ghost" data-rate="2">2×</button>
+        <button class="ghost" data-rate="3">3×</button>
+        <button class="ghost" data-rate="5">5×</button>
+        <button class="ghost" data-rate="10">10×</button>
+      </div>
+    </div>
+    <div class="seg">
+      <span class="label">截取范围（秒，可选）</span>
+      <div class="inline">
+        <input type="number" id="startT" placeholder="开始(默认0)" min="0" step="0.1" style="width:120px">
+        <span>~</span>
+        <input type="number" id="endT" placeholder="结束(默认片尾)" min="0" step="0.1" style="width:120px">
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="btnExtract" disabled>开始抽帧</button>
+      <span class="msg" id="extractMsg" style="margin:0"></span>
+    </div>
+    <div class="progress" id="extractBar" style="display:none"><div></div></div>
+    <div class="grid" id="framesGrid"></div>
+  </div>
+
+  <!-- 第 3 步：识别 -->
+  <div class="card">
+    <h2>③ 识别引擎（抽帧 → 文字）</h2>
+    <p class="hint">推荐「本地开源 OCR」：免费、离线、无需 Key。也可切换为云端视觉大模型。</p>
+    <div class="row" style="margin-bottom:12px;">
+      <label>识别引擎</label>
+      <select id="provider">
+        <option value="local" selected>本地开源 OCR (RapidOCR，免 Key)</option>
+        <option value="qwen">阿里通义千问 (qwen-vl-max)</option>
+        <option value="zhipu">智谱 AI (glm-4v-flash)</option>
+        <option value="hunyuan">腾讯混元 (hunyuan-vision)</option>
+        <option value="deepseek">DeepSeek (deepseek-v4-flash / pro)</option>
+        <option value="custom">自定义 OpenAI 兼容</option>
+      </select>
+      <label>并发数</label>
+      <input type="number" id="concurrency" value="3" min="1" max="10" style="width:70px">
+    </div>
+    <div id="apiConfigArea" style="display:none;">
+      <div class="row" style="margin-bottom:12px;">
+        <label>API Key</label>
+        <input type="password" id="apiKey" placeholder="sk-..." style="width:320px">
+        <label>Base URL</label>
+        <input type="text" id="baseUrl" placeholder="留空用预设" style="width:320px">
+        <label>模型名</label>
+        <input type="text" id="modelName" placeholder="留空用预设" style="width:200px">
+      </div>
+      <details>
+        <summary>高级：自定义识别提示词</summary>
+        <textarea id="prompt" rows="6"></textarea>
+      </details>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button id="btnRecognize" disabled>开始识别（全部帧）</button>
+      <button id="btnRecognizeSel" class="ghost" disabled>识别选中帧</button>
+      <span class="msg" id="recogMsg" style="margin:0"></span>
+    </div>
+    <div class="progress" id="recogBar" style="display:none"><div></div></div>
+    <div id="results"></div>
+  </div>
+
+  <!-- 第 4 步：清洗 -->
+  <div class="card">
+    <h2>④ 内容清洗（DeepSeek）</h2>
+    <p class="hint">内置规则：去空、去相邻重复、去时间戳/日期等界面噪声。可选「DeepSeek 智能整合」让大模型合并润色为连贯文档。</p>
+    <div class="row" style="margin-bottom:12px;">
+      <label>DeepSeek API Key</label>
+      <input type="password" id="cleanApiKey" placeholder="用于清洗整合，留空则只用内置规则" style="width:320px">
+      <label>模型</label>
+      <select id="cleanModel">
+        <option value="deepseek-v4-flash" selected>deepseek-v4-flash（快）</option>
+        <option value="deepseek-v4-pro">deepseek-v4-pro（强）</option>
+      </select>
+    </div>
+    <div class="row">
+      <button id="btnClean">内置规则清洗</button>
+      <button id="btnCleanLLM" class="ok">DeepSeek 智能整合（更连贯）</button>
+      <span class="msg" id="cleanMsg" style="margin:0"></span>
+    </div>
+    <div class="msg" id="cleanInfo" style="margin-top:6px;"></div>
+  </div>
+
+  <!-- 第 5 步：导出 -->
+  <div class="card">
+    <h2>⑤ 导出 Markdown</h2>
+    <div class="row" style="margin-bottom:12px;">
+      <label>文件名</label>
+      <input type="text" id="filename" value="清洗文档" style="width:240px">
+      <button id="btnExport">导出 .md</button>
+      <span class="msg" id="exportMsg" style="margin:0"></span>
+    </div>
+    <div id="output" contenteditable="true" placeholder="清洗后的文档将显示在这里，可直接编辑后再导出"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = {
+  videoId: null, duration: 0, filename: '',
+  frames: [], selected: new Set(), subdir: '',
+  results: [], cleaned: ''
+};
+
+/* ---------- 上传 ---------- */
+const drop = $('drop'), fileInput = $('file');
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => {
+  e.preventDefault(); drop.classList.remove('over');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+};
+fileInput.onchange = () => { if (fileInput.files.length) handleFile(fileInput.files[0]); };
+
+async function handleFile(f) {
+  const fd = new FormData(); fd.append('file', f);
+  setMsg('uploadMsg', '上传中...', 'warn');
+  const r = await fetch('/api/upload', { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.error) { setMsg('uploadMsg', '✗ ' + d.error, 'err'); return; }
+  state.videoId = d.video_id; state.duration = d.duration; state.filename = d.filename;
+  $('vName').textContent = d.filename;
+  $('vDur').textContent = d.duration;
+  $('vRes').textContent = `${d.width}×${d.height}`;
+  $('vFps').textContent = d.fps;
+  $('videoInfo').style.display = 'block';
+  $('btnExtract').disabled = false;
+  setMsg('uploadMsg', '✓ 上传成功', 'ok');
+  markStep('s1', 'done');
+  $('startT').max = d.duration; $('endT').max = d.duration;
+  drop.textContent = `已选择：${f.name}`;
+}
+
+/* ---------- 倍率控制 ---------- */
+$('interval').oninput = () => {
+  const v = parseFloat($('interval').value) || 0;
+  $('intervalRate').textContent = v > 0 ? `= ${v}× 基准` : '= ?';
+};
+document.querySelectorAll('[data-rate]').forEach(b => {
+  b.onclick = () => { $('interval').value = b.dataset.rate; $('interval').oninput(); };
+});
+
+/* ---------- 抽帧 ---------- */
+$('btnExtract').onclick = async () => {
+  const interval = parseFloat($('interval').value);
+  if (!interval || interval <= 0) { setMsg('extractMsg', '✗ 间隔非法', 'err'); return; }
+  const body = {
+    video_id: state.videoId, interval,
+    start: parseFloat($('startT').value) || 0,
+    end: parseFloat($('endT').value) || 0,
+  };
+  $('btnExtract').disabled = true;
+  $('extractBar').style.display = 'block'; $('extractBar').firstElementChild.style.width = '30%';
+  setMsg('extractMsg', '抽帧中...', 'warn');
+  const r = await fetch('/api/extract', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const d = await r.json();
+  $('extractBar').firstElementChild.style.width = '100%';
+  if (d.error) { setMsg('extractMsg', '✗ ' + d.error, 'err'); $('btnExtract').disabled = false; return; }
+  state.frames = d.names.map((n, i) => ({ name: n, idx: i + 1, url: d.url_prefix + n }));
+  state.subdir = d.subdir || '';
+  state.selected = new Set();
+  setMsg('extractMsg', `✓ 共抽取 ${d.total} 帧（间隔 ${d.interval}s）`, 'ok');
+  renderFrames();
+  $('btnRecognize').disabled = false;
+  $('btnRecognizeSel').disabled = false;
+  markStep('s2', 'done');
+};
+
+function renderFrames() {
+  const g = $('framesGrid'); g.innerHTML = '';
+  state.frames.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'frame'; div.dataset.idx = f.idx;
+    div.innerHTML = `<img src="${f.url}" loading="lazy"><div class="tag">#${f.idx}</div>`;
+    div.onclick = () => {
+      if (state.selected.has(f.idx)) { state.selected.delete(f.idx); div.classList.remove('sel'); }
+      else { state.selected.add(f.idx); div.classList.add('sel'); }
+    };
+    g.appendChild(div);
+  });
+}
+
+/* ---------- 供应商配置联动 ---------- */
+const PRESETS = {
+  local:    { base:'', model:'' },
+  deepseek: { base:'https://api.deepseek.com', model:'deepseek-v4-flash' },
+  qwen:    { base:'https://dashscope.aliyuncs.com/compatible-mode/v1', model:'qwen-vl-max' },
+  zhipu:   { base:'https://open.bigmodel.cn/api/paas/v4', model:'glm-4v-flash' },
+  hunyuan: { base:'https://api.hunyuan.cloud.tencent.com/v1', model:'hunyuan-vision' },
+  custom:  { base:'', model:'' },
+};
+$('provider').onchange = () => {
+  const v = $('provider').value;
+  const p = PRESETS[v];
+  if (v === 'local') {
+    $('apiConfigArea').style.display = 'none';
+    $('concurrency').value = 1;
+    $('concurrency').disabled = true;
+  } else {
+    $('apiConfigArea').style.display = 'block';
+    $('concurrency').disabled = false;
+    $('baseUrl').placeholder = p.base ? `预设：${p.base}` : '必填';
+    $('modelName').placeholder = p.model ? `预设：${p.model}` : '必填';
+    $('baseUrl').value = ''; $('modelName').value = '';
+  }
+};
+$('provider').onchange();
+
+/* ---------- 识别 ---------- */
+function getCfg() {
+  return {
+    provider: $('provider').value,
+    api_key: $('apiKey').value,
+    base_url: $('baseUrl').value,
+    model: $('modelName').value,
+    prompt: $('prompt').value,
+    concurrency: parseInt($('concurrency').value) || 3,
+  };
+}
+
+async function doRecognize(onlySelected) {
+  const cfg = getCfg();
+  const body = { ...cfg, video_id: state.videoId, subdir: state.subdir };
+  if (onlySelected) body.indices = [...state.selected];
+  $('btnRecognize').disabled = true; $('btnRecognizeSel').disabled = true;
+  $('recogBar').style.display = 'block';
+  setMsg('recogMsg', '识别中，请耐心等待...', 'warn');
+  const r = await fetch('/api/recognize', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const d = await r.json();
+  $('recogBar').style.display = 'none';
+  if (d.error) { setMsg('recogMsg', '✗ ' + d.error, 'err'); $('btnRecognize').disabled = false; $('btnRecognizeSel').disabled = false; return; }
+  state.results = d.results;
+  setMsg('recogMsg', `✓ 识别完成：成功 ${d.success}/${d.total}${d.errors.length ? '，失败 '+d.errors.length : ''}`, d.errors.length ? 'warn' : 'ok');
+  if (d.errors.length) console.warn(d.errors);
+  renderResults();
+  $('btnRecognize').disabled = false; $('btnRecognizeSel').disabled = false;
+  markStep('s3', 'done');
+}
+
+$('btnRecognize').onclick = () => doRecognize(false);
+$('btnRecognizeSel').onclick = () => {
+  if (state.selected.size === 0) { setMsg('recogMsg', '请先在抽帧网格中点选帧', 'warn'); return; }
+  doRecognize(true);
+};
+
+function renderResults() {
+  const c = $('results'); c.innerHTML = '';
+  state.results.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'result-item';
+    div.innerHTML = `<span class="idx">帧 #${r.index}</span><pre>${escapeHtml(r.text)}</pre>`;
+    c.appendChild(div);
+  });
+}
+
+/* ---------- 清洗 ---------- */
+$('btnClean').onclick = async () => {
+  if (!state.results.length) { setMsg('cleanMsg', '请先识别', 'warn'); return; }
+  setMsg('cleanMsg', '清洗中...', 'warn');
+  const r = await fetch('/api/clean', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ results: state.results }) });
+  const d = await r.json();
+  if (d.error) { setMsg('cleanMsg', '✗ ' + d.error, 'err'); return; }
+  state.cleaned = d.cleaned; $('output').textContent = d.cleaned;
+  setMsg('cleanMsg', '✓ 清洗完成', 'ok');
+  $('cleanInfo').textContent = `清洗后 ${d.cleaned.length} 字符`;
+  markStep('s4', 'done');
+};
+
+$('btnCleanLLM').onclick = async () => {
+  if (!state.results.length) { setMsg('cleanMsg', '请先识别', 'warn'); return; }
+  const apiKey = $('cleanApiKey').value.trim();
+  if (!apiKey) { setMsg('cleanMsg', '✗ 请在「DeepSeek API Key」处填写 Key', 'err'); return; }
+  setMsg('cleanMsg', 'DeepSeek 整合中，可能较慢...', 'warn');
+  const body = {
+    results: state.results, use_llm: true,
+    provider: 'deepseek', api_key: apiKey, model: $('cleanModel').value,
+  };
+  const r = await fetch('/api/clean', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const d = await r.json();
+  if (d.error) { setMsg('cleanMsg', '✗ ' + d.error, 'err'); return; }
+  state.cleaned = d.cleaned; $('output').textContent = d.cleaned;
+  setMsg('cleanMsg', '✓ DeepSeek 整合完成', 'ok');
+  $('cleanInfo').textContent = `整合后 ${d.cleaned.length} 字符`;
+  markStep('s4', 'done');
+};
+
+/* ---------- 导出 ---------- */
+$('btnExport').onclick = async () => {
+  const content = $('output').textContent;
+  if (!content.trim()) { setMsg('exportMsg', '✗ 内容为空', 'err'); return; }
+  setMsg('exportMsg', '导出中...', 'warn');
+  const r = await fetch('/api/export', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content, filename: $('filename').value }) });
+  const d = await r.json();
+  if (d.error) { setMsg('exportMsg', '✗ ' + d.error, 'err'); return; }
+  window.location.href = '/api/download/' + encodeURIComponent(d.filename);
+  setMsg('exportMsg', '✓ 已导出 ' + d.filename, 'ok');
+  markStep('s5', 'done');
+};
+
+/* ---------- 工具 ---------- */
+function setMsg(id, text, cls) { const el = $(id); el.textContent = text; el.className = 'msg ' + (cls || ''); }
+function markStep(id, cls) { const el = $(id); el.className = 'step ' + cls; }
+function escapeHtml(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>
